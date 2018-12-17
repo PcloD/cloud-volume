@@ -4,7 +4,9 @@ import time
 from functools import partial
 
 from google.cloud.storage import Client
-import boto3 
+import boto3
+import requests
+from hyper.contrib import HTTP20Adapter
 
 from .secrets import google_credentials, aws_credentials
 
@@ -126,3 +128,24 @@ class GCloudBucketPool(ConnectionPool):
     )
 
     return client.get_bucket(self.bucket)
+
+
+class HttpConnectionPool(ConnectionPool):
+  def __init__(self, protocol, bucket):
+    self.protocol = protocol
+    self.bucket = bucket
+    super(HttpConnectionPool, self).__init__()
+
+  def _create_connection(self):
+    session = requests.Session()
+    if self.protocol == 'https2':
+      print("Creating HTTP2 Pool")
+      session.mount('https://%s' % self.bucket, HTTP20Adapter())
+
+    return session
+
+  def close(self, conn):
+    try:
+      return conn.close()
+    except AttributeError:
+      pass # AttributeError: 'S3' object has no attribute 'close' on shutdown
